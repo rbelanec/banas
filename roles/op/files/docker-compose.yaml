@@ -2,6 +2,7 @@ services:
   op-connect-api:
     image: 1password/connect-api:latest
     container_name: op-api
+    restart: unless-stopped
     user: root:root
     volumes:
       - ".op:/root/.op"
@@ -20,6 +21,7 @@ services:
   op-connect-sync:
     image: 1password/connect-sync:latest
     container_name: op-sync
+    restart: unless-stopped
     user: root:root
     volumes:
       - ".op:/root/.op"
