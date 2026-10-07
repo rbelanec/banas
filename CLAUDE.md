@@ -108,6 +108,18 @@ out, because invite codes are minted from the admin dashboard and that requires 
 (the `INVITE_ONLY` signup gate in upstream `api/server.js`). Deploy open, register, read the uid from
 `/data/@opengym/data/db.json`, set `opengym_admin_uids`, re-run, then set `opengym_invite_only`.
 
+**`pihole` publishes a host port on purpose.** DNS can't go through Traefik, so `53/tcp+udp` is
+published — on `172.16.1.2` only (`pihole_dns_bind`), because systemd-resolved already holds `:53`
+on `127.0.0.53/54` and the wildcard bind would collide. The web UI goes through Traefik as
+`pihole-ba.belanec.eu` and is deliberately LAN-only: there is no VPS proxy for it, and there should
+not be one. `FTLCONF_dns_listeningMode: ALL` is required, since LAN clients are not on the bridge
+subnet. Its 1Password item (`pihole`, field `password`) is created by hand — the Connect token is
+read-only (`generic_item` creates fail with "token does not have permission to perform create").
+
+**1Password Connect (`op`) must be running for any role with a lookup.** Its compose file had no
+`restart:` policy, so the containers stayed down after a reboot; it now has `unless-stopped`. If
+lookups fail, check `docker ps -a | grep op-` before suspecting the token.
+
 **Ordering matters in `banas.yaml`:** `common` installs Docker, `traefik` creates the `proxy`
 network, `certbot`/`op` must precede anything doing 1Password lookups at runtime. New service roles
 belong after `op`.

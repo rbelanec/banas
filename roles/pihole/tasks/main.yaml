@@ -1,0 +1,45 @@
+- name: Ensure Pi-hole config directory exists
+  file:
+    path: "{{ pihole_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Read the {{ pihole_op_item }} item from 1Password
+  onepassword.connect.item_info:
+    token: "{{ connect_token }}"
+    item: "{{ pihole_op_item }}"
+    vault: "{{ ansible_vault }}"
+  no_log: true
+  register: op_item
+
+- name: Setting facts so that they will be persisted in the fact cache
+  ansible.builtin.set_fact:
+    piholePass: "{{ op_item.op_item.fields.password.value }}"
+  no_log: true
+
+- name: Check the Pi-hole password fits in a single-quoted .env value
+  ansible.builtin.assert:
+    that: "\"'\" not in piholePass"
+    fail_msg: "The '{{ pihole_op_item }}' password contains a single quote, which the compose .env cannot hold - change it in 1Password."
+  no_log: true
+
+- name: Copy Pi-hole .env config
+  template:
+    src: pihole.env.j2
+    dest: "{{ pihole_config_dir }}/.env"
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Copy Docker Compose file
+  copy:
+    src: docker-compose.yaml
+    dest: "{{ pihole_config_dir }}/docker-compose.yaml"
+    mode: '0644'
+
+- name: Start Pi-hole container with Docker Compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ pihole_config_dir }}"
+    state: present

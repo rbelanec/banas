@@ -1,0 +1,15 @@
+---
+pihole_config_dir: /opt/pihole
+
+# DNS is published on this address only. The wildcard would collide with
+# systemd-resolved's stub listener on 127.0.0.53/127.0.0.54, and binding the LAN
+# address keeps Pi-hole off the docker bridges.
+pihole_dns_bind: 172.16.1.2
+
+# Where Pi-hole forwards whatever it does not block (FTLCONF_dns_upstreams, ";"-separated).
+pihole_upstreams: "1.1.1.1;1.0.0.1"
+
+# 1Password item holding the web UI password, created by hand like the other roles'
+# items (the Connect token is read-only): the `ansible_vault` vault from banas.yaml,
+# with a field labelled `password`. Anything but a single quote is fine in it.
+pihole_op_item: pihole

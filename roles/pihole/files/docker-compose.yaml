@@ -1,0 +1,48 @@
+services:
+  pihole:
+    image: pihole/pihole:latest
+    container_name: pihole
+    restart: unless-stopped
+    ports:
+      # LAN address only (PIHOLE_DNS_BIND): systemd-resolved already holds :53 on
+      # 127.0.0.53/54. No 80/443 - the web UI goes through Traefik. No 67 (the
+      # router does DHCP) and no 123 (NTP is off below).
+      - "${PIHOLE_DNS_BIND}:53:53/tcp"
+      - "${PIHOLE_DNS_BIND}:53:53/udp"
+    environment:
+      TZ: Europe/Bratislava
+      # Set from the environment, the password is read-only in the web UI.
+      FTLCONF_webserver_api_password: ${PIHOLE_PASSWORD}
+      FTLCONF_dns_upstreams: ${PIHOLE_UPSTREAMS}
+      # Queries arrive from LAN addresses, not the bridge subnet, so the default
+      # "local" mode would drop them. Exposure is still LAN-only via the port bind.
+      FTLCONF_dns_listeningMode: ALL
+      # The host keeps its own time; without SYS_TIME the NTP client only logs errors.
+      FTLCONF_ntp_ipv4_active: "false"
+      FTLCONF_ntp_ipv6_active: "false"
+      FTLCONF_ntp_sync_active: "false"
+    # Upstream's three: NET_ADMIN is only for DHCP and SYS_TIME only for the NTP client,
+    # both unused here. SYS_NICE lets FTL raise its priority (misc.nice); FTL warns on
+    # every start without it, even with misc.nice disabled.
+    cap_add:
+      - SYS_NICE
+    volumes:
+      - /opt/pihole/etc-pihole:/etc/pihole
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pihole.rule=Host(`pihole-ba.belanec.eu`)"
+      - "traefik.http.routers.pihole.entrypoints=websecure"
+      - "traefik.http.routers.pihole.tls.domains[0].main=pihole-ba.belanec.eu"
+      - "traefik.http.routers.pihole.tls.domains[0].sans=*.belanec.eu"
+      - "traefik.http.routers.pihole.tls=true"
+      - "traefik.http.services.pihole.loadbalancer.server.port=80"
+      # Pi-hole 6 answers 403 at `/`; send the bare hostname to the dashboard.
+      - "traefik.http.middlewares.pihole-admin.redirectregex.regex=^https://pihole-ba\\.belanec\\.eu/?$$"
+      - "traefik.http.middlewares.pihole-admin.redirectregex.replacement=https://pihole-ba.belanec.eu/admin/"
+      - "traefik.http.routers.pihole.middlewares=pihole-admin"
+
+networks:
+  proxy:
+    name: proxy
