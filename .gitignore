@@ -1,2 +1,5 @@
 *pub
 op_test.yaml
+
+# Local secrets — never commit
+.env

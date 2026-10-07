@@ -1,0 +1,34 @@
+- name: Verify the 1Password Connect lookup works
+  hosts: "{{ target | default('banas') }}"
+  gather_facts: false
+  become: false
+  vars:
+    connect_token: "{{ lookup('ansible.builtin.env', 'OP_API_TOKEN') }}"
+    ansible_vault: r26avvbe4vsjsx2cnby7jw5unq
+    op_check_item: "{{ check_item | default('mealie-db') }}"
+  environment:
+    OP_CONNECT_HOST: https://op.belanec.eu
+  tasks:
+    - name: Fail early if OP_API_TOKEN is missing
+      ansible.builtin.assert:
+        that:
+          - connect_token | length > 0
+          - connect_token != 'REPLACE_ME'
+        fail_msg: >-
+          OP_API_TOKEN is not set in this shell.
+          Run:  set -a; . ./.env; set +a
+        success_msg: "OP_API_TOKEN is present ({{ connect_token | length }} chars)"
+
+    - name: Read the item from 1Password Connect
+      onepassword.connect.item_info:
+        token: "{{ connect_token }}"
+        item: "{{ op_check_item }}"
+        vault: "{{ ansible_vault }}"
+      no_log: false
+      register: op_item
+
+    - name: Report field labels only (never the values)
+      ansible.builtin.debug:
+        msg: >-
+          OK - '{{ op_check_item }}' resolved from vault {{ ansible_vault }};
+          fields: {{ op_item.op_item.fields.keys() | list | sort }}

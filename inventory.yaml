@@ -1,7 +1,12 @@
 all:
   hosts:
     banas:
-      ansible_host: 172.16.1.2
-      ansible_user: ansible
+      # Deliberately an ~/.ssh/config alias, not an IP: the `banas` Host block
+      # supplies HostName 172.16.1.2 and the ProxyJump through the VPS, so this
+      # works both on the LAN and remotely. Override for a direct LAN run with:
+      #   -e ansible_host=172.16.1.2
+      ansible_host: banas
+      # Override when the ansible user isn't set up yet: -e banas_user=robert
+      ansible_user: "{{ banas_user | default('ansible') }}"
   vars:
     ansible_python_interpreter: /usr/bin/python3

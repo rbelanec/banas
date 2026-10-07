@@ -1,5 +1,5 @@
 - name: Setup NAS server with Jellyfin
-  hosts: "{{ target }}"
+  hosts: "{{ target | default('banas') }}"
   become: true
   vars:
     connect_token: "{{ lookup('ansible.builtin.env', 'OP_API_TOKEN') }}" 
