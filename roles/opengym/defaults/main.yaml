@@ -1,0 +1,27 @@
+---
+opengym_config_dir: /opt/opengym
+btrfs_subvolume: "@opengym"
+
+# The public URL - what people type, and the one hostname passkeys are bound to
+# (RP_ID/ORIGIN). Browsers require HTTPS for them. Changing it after people have
+# registered invalidates every existing passkey.
+#
+# Not the Traefik Host: the VPS nginx (belanecvps, sites-available/gym.belanec.eu.conf)
+# terminates gym.belanec.eu and forwards with `Host: gym-ba.belanec.eu`, which is what
+# the label in files/docker-compose.yaml matches. Opening gym-ba.belanec.eu directly
+# loads the app, but passkey sign-in there fails the origin check.
+opengym_hostname: gym.belanec.eu
+opengym_rp_name: openGym
+
+# How long a sign-in lasts. Only affects new sign-ins.
+opengym_session_days: 90
+
+# --- Phase 2 lockdown ------------------------------------------------------
+# Leave these alone for the first deploy. INVITE_ONLY on a fresh instance locks
+# everyone out: invite codes come from the admin dashboard, and that needs a
+# registered admin. So: deploy open -> register your passkey -> read your id
+# from /data/@opengym/data/db.json ("users"[].id) -> set opengym_admin_uids
+# here -> re-run the role -> then flip opengym_invite_only.
+opengym_admin_uids: ""
+opengym_invite_only: false
+opengym_allow_guest: true

@@ -1,0 +1,55 @@
+- name: Ensure openGym config directory exists
+  file:
+    path: "{{ opengym_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Ensure /data is mounted and available
+  stat:
+    path: /data
+  register: data_dir
+
+- name: Fail if /data is not a Btrfs mount
+  fail:
+    msg: "/data must be a mounted Btrfs filesystem"
+  when: not data_dir.stat.exists
+
+- name: Create Btrfs subvolume
+  command: "btrfs subvolume create /data/{{ btrfs_subvolume }}"
+  args:
+    creates: "/data/{{ btrfs_subvolume }}"
+
+- name: Create openGym data directories
+  file:
+    path: "/data/{{ btrfs_subvolume }}/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - data
+    - coach-auth
+    - media/img
+    - media/gif
+
+- name: Copy openGym .env config
+  template:
+    src: opengym.env.j2
+    dest: "{{ opengym_config_dir }}/.env"
+    owner: root
+    group: root
+    mode: '0640'
+
+- name: Copy Docker Compose file
+  copy:
+    src: docker-compose.yaml
+    dest: "{{ opengym_config_dir }}/docker-compose.yaml"
+    mode: '0644'
+
+- name: Start openGym containers with Docker Compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ opengym_config_dir }}"
+    state: present
+    pull: missing

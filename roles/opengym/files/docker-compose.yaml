@@ -1,0 +1,98 @@
+name: opengym
+
+services:
+  # One-time: downloads the exercise images + GIFs (~140 MB) into the media dirs,
+  # skipped once they are present. Metadata and instruction text are MIT; the
+  # images and GIFs are (c) Gym visual and used under the upstream dataset's
+  # terms - openGym neither redistributes nor relicenses them. See NOTICE.md in
+  # https://github.com/DuarteSantos8/openGym.
+  media:
+    image: alpine/git
+    container_name: opengym-media
+    volumes:
+      - /data/@opengym/media/img:/out/img
+      - /data/@opengym/media/gif:/out/gif
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ -z "$$(ls -A /out/img 2>/dev/null)" ]; then
+          echo "Downloading exercise media (~140 MB, one time)..."
+          git clone --depth 1 https://github.com/hasaneyldrm/exercises-dataset /tmp/ds
+          cp /tmp/ds/images/*.jpg /out/img/ && cp /tmp/ds/videos/*.gif /out/gif/
+          echo "Exercise media ready ($$(ls /out/img | wc -l) images)."
+        else
+          echo "Exercise media already present - skipping download."
+        fi
+    networks:
+      - internal
+    restart: "no"
+
+  # Passkey auth + per-user data. Deliberately no `build:` stanza: the prebuilt
+  # image is pulled, so the openGym source tree is not needed on the host.
+  api:
+    image: ghcr.io/duartesantos8/opengym-api:latest
+    container_name: opengym-api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - PORT=${PORT:-3000}
+      - DATA_DIR=/data
+    volumes:
+      # Users, passkeys, workout history, session secret. THIS is the backup target.
+      - /data/@opengym/data:/data
+      # Provider credential cache, a sibling of data/ on purpose so a live refresh
+      # token never lands inside a `tar czf ... data/` backup.
+      - /data/@opengym/coach-auth:/coach-auth
+    networks:
+      - internal
+
+  # Serves the frontend and proxies /api -> api. Single origin, which passkeys require.
+  web:
+    image: ghcr.io/duartesantos8/opengym-web:latest
+    container_name: opengym-web
+    restart: unless-stopped
+    depends_on:
+      media:
+        condition: service_completed_successfully
+      api:
+        condition: service_started
+    # Traefik skips containers whose health is still "starting", and the image only
+    # probes every 5m - so each (re)start meant ~5 min of 404. Probe every 5s until
+    # the first pass; the image's own test and 5m interval apply after that.
+    healthcheck:
+      start_period: 1m
+      start_interval: 5s
+    # No `ports:` - Traefik reaches this container on the proxy network. Publishing
+    # the upstream default of 8080 would collide with the Traefik dashboard.
+    environment:
+      - NGINX_PORT=${NGINX_PORT:-80}
+      - BACKEND=${BACKEND:-api}
+      - PORT=${PORT:-3000}
+      - RESOLVER=${RESOLVER:-127.0.0.11}
+      - CF_CONNECTING_IP=${CF_CONNECTING_IP:-}
+    volumes:
+      - /data/@opengym/media/img:/usr/share/nginx/html/img:ro
+      - /data/@opengym/media/gif:/usr/share/nginx/html/gif:ro
+    networks:
+      - proxy
+      - internal
+    labels:
+      - "traefik.enable=true"
+      # Required: web is on two networks and traefik.yml sets no default, so without
+      # this Traefik may pick opengym_internal (which it is not on) and answer 504.
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.opengym.rule=Host(`gym-ba.belanec.eu`)"
+      - "traefik.http.routers.opengym.entrypoints=websecure"
+      - "traefik.http.routers.opengym.tls.domains[0].main=gym-ba.belanec.eu"
+      - "traefik.http.routers.opengym.tls.domains[0].sans=*.belanec.eu"
+      - "traefik.http.routers.opengym.tls=true"
+      - "traefik.http.services.opengym.loadbalancer.server.port=80"
+
+networks:
+  # Shared with Traefik. Only `web` joins it, so the API is not reachable from
+  # any other stack on the host.
+  proxy:
+    name: proxy
+  # api <-> web only. nginx resolves BACKEND (`api`) over this network.
+  internal:
+    name: opengym_internal
